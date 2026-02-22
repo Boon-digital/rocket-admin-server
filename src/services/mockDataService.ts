@@ -1,8 +1,8 @@
 import { readFile, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import type { PaginatedRequest, PaginatedResponse } from 'admin-template-config/types/api.js';
-import { MOCKDATA_DIR_DEFAULT } from 'admin-template-config/registry.js';
+import type { PaginatedRequest, PaginatedResponse } from '@ruben/admin-template-config/types/api.js';
+import { MOCKDATA_DIR_DEFAULT } from '@ruben/admin-template-config/registry.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
