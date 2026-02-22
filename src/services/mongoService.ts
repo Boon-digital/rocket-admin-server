@@ -1,6 +1,6 @@
 import { MongoClient, ObjectId, type Db, type Filter } from 'mongodb';
-import type { PaginatedRequest, PaginatedResponse } from '@ruben/admin-template-config/types/api.js';
-import { entityRegistry, type EntityKey } from '@ruben/admin-template-config/registry.js';
+import type { PaginatedRequest, PaginatedResponse } from '@boon-digital/rocket-admin-config/types/api.js';
+import { entityRegistry, type EntityKey } from '@boon-digital/rocket-admin-config/registry.js';
 
 let client: MongoClient | null = null;
 let db: Db | null = null;

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { MongoService } from '../services/mongoService.js';
-import type { PaginatedRequest } from '@ruben/admin-template-config/types/api.js';
-import { entityRegistry, type EntityKey } from '@ruben/admin-template-config/registry.js';
+import type { PaginatedRequest } from '@boon-digital/rocket-admin-config/types/api.js';
+import { entityRegistry, type EntityKey } from '@boon-digital/rocket-admin-config/registry.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 export function makeEntityController(entityKey: EntityKey) {

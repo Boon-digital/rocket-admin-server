@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { entityRegistry, type EntityKey } from '@ruben/admin-template-config/registry.js';
+import { entityRegistry, type EntityKey } from '@boon-digital/rocket-admin-config/registry.js';
 import { makeEntityController } from '../controllers/entityController.js';
 
 export const router = Router();

@@ -12,7 +12,7 @@
     "format": "prettier --write \"src/**/*.ts\""
   },
   "dependencies": {
-    "@ruben/admin-template-config": "^1.0.0",
+    "@boon-digital/rocket-admin-config": "^1.0.0",
     "express": "^4.19.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
