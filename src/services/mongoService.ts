@@ -1,6 +1,7 @@
 import { MongoClient, ObjectId, type Db, type Filter } from 'mongodb';
 import type { PaginatedRequest, PaginatedResponse } from '@boon-digital/rocket-admin-config/types/api.js';
 import { entityRegistry, type EntityKey } from '@boon-digital/rocket-admin-config/registry.js';
+import { maskEncryptedFields } from '../lib/crypto.js';
 
 let client: MongoClient | null = null;
 let db: Db | null = null;
@@ -71,12 +72,12 @@ export class MongoService<T extends { _id?: any }> {
       ? { [sortBy]: sortOrder === 'desc' ? -1 : 1 }
       : {};
 
-    const data = await this.collection
+    const data = (await this.collection
       .find(query)
       .sort(sortSpec)
       .skip(skip)
       .limit(pageSize)
-      .toArray() as T[];
+      .toArray() as T[]).map(maskEncryptedFields);
 
     return {
       data,
@@ -92,6 +93,19 @@ export class MongoService<T extends { _id?: any }> {
   async getById(id: string): Promise<T | null> {
     try {
       const result = await this.collection.findOne({ _id: new ObjectId(id) } as Filter<T>);
+      return result ? maskEncryptedFields(result as Record<string, any>) as T : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Like getById but returns the raw document without masking encrypted fields.
+   * Only use this server-side (e.g. in the decrypt controller).
+   */
+  async getRawById(id: string): Promise<T | null> {
+    try {
+      const result = await this.collection.findOne({ _id: new ObjectId(id) } as Filter<T>);
       return result as T | null;
     } catch {
       return null;
@@ -104,7 +118,7 @@ export class MongoService<T extends { _id?: any }> {
       const results = await this.collection
         .find({ _id: { $in: objectIds } } as Filter<T>)
         .toArray();
-      return results as T[];
+      return (results as T[]).map(maskEncryptedFields);
     } catch {
       return [];
     }
@@ -116,7 +130,8 @@ export class MongoService<T extends { _id?: any }> {
       $or: this.searchFields.map((field) => ({ [field]: regex })),
     } as Filter<T>;
 
-    return this.collection.find(filter).limit(limit).toArray() as Promise<T[]>;
+    const results = await this.collection.find(filter).limit(limit).toArray() as T[];
+    return results.map(maskEncryptedFields);
   }
 
   async create(data: Omit<T, '_id'>): Promise<T> {

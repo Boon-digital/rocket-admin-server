@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { entityRegistry, type EntityKey } from '@boon-digital/rocket-admin-config/registry.js';
 import { makeEntityController } from '../controllers/entityController.js';
+import { credentialsRouter } from './credentials.js';
 
 export const router = Router();
 
@@ -21,6 +22,9 @@ for (const [key, entry] of Object.entries(entityRegistry) as [EntityKey, typeof 
 
   router.use(entry.route, entityRouter);
 }
+
+// Credentials (encrypt/decrypt)
+router.use('/credentials', credentialsRouter);
 
 // API info endpoint
 router.get('/', (_req, res) => {
