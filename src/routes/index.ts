@@ -15,6 +15,7 @@ for (const [key, entry] of Object.entries(entityRegistry) as [EntityKey, typeof 
   entityRouter.get('/', controller.getAll);
   entityRouter.get('/search', controller.search);
   entityRouter.get('/by-ids', controller.getByIds);
+  entityRouter.get('/by-field/:field/:value', controller.getByField);
   entityRouter.get('/:id', controller.getById);
   entityRouter.post('/', controller.create);
   entityRouter.patch('/:id', controller.update);

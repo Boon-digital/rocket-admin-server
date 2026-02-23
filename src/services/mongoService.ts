@@ -134,6 +134,16 @@ export class MongoService<T extends { _id?: any }> {
     return results.map(maskEncryptedFields);
   }
 
+  async findByField(field: string, value: string): Promise<T[]> {
+    try {
+      const filter = { [field]: value } as Filter<T>;
+      const results = await this.collection.find(filter).toArray() as T[];
+      return results.map(maskEncryptedFields);
+    } catch {
+      return [];
+    }
+  }
+
   async create(data: Omit<T, '_id'>): Promise<T> {
     const result = await this.collection.insertOne(data as any);
     return { ...data, _id: result.insertedId } as T;

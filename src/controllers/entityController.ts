@@ -62,6 +62,17 @@ export function makeEntityController(entityKey: EntityKey) {
       }
     },
 
+    async getByField(req: Request, res: Response, next: NextFunction) {
+      try {
+        const { field, value } = req.params;
+        if (!field || !value) throw new AppError(400, 'field and value parameters are required');
+        const results = await service.findByField(field, value);
+        res.json({ success: true, data: results });
+      } catch (error) {
+        next(error);
+      }
+    },
+
     async create(req: Request, res: Response, next: NextFunction) {
       try {
         const result = await service.create(req.body);
