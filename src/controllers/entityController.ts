@@ -7,7 +7,14 @@ import { AppError } from '../middleware/errorHandler.js';
 // Per-entity write-time denormalization: called before create/update, mutates body in place
 type DenormalizeFn = (body: any) => Promise<void>
 
+// Per-entity post-write sync: called after create/update/delete to keep related entities in sync
+// op: 'upsert' after create/update, 'delete' after delete
+// savedDoc: the full saved document (null on delete)
+// previousDoc: the document before the write (null on create)
+type CrossEntitySyncFn = (op: 'upsert' | 'delete', savedDoc: any | null, previousDoc: any | null) => Promise<void>
+
 const contactService = new MongoService('contacts')
+const bookingService = new MongoService('bookings')
 
 const denormalizations: Partial<Record<EntityKey, DenormalizeFn>> = {
   stays: async (body: any) => {
@@ -26,11 +33,76 @@ const denormalizations: Partial<Record<EntityKey, DenormalizeFn>> = {
   },
 }
 
+/**
+ * Build a staySummary entry from a stay document.
+ * Only includes the fields that are denormalized into the booking.
+ */
+function buildStaySummary(stay: any): object {
+  return {
+    stayId: typeof stay._id === 'object' ? (stay._id.$oid ?? stay._id.toString()) : String(stay._id),
+    hotelName: stay.hotelName ?? '',
+    checkInDate: stay.checkInDate ?? '',
+    checkOutDate: stay.checkOutDate ?? '',
+    guestNames: stay.guestNames ?? [],
+  }
+}
+
+const crossEntitySyncs: Partial<Record<EntityKey, CrossEntitySyncFn>> = {
+  /**
+   * When a stay is created, updated or deleted:
+   * - Find the parent booking via bookingId
+   * - Rebuild that booking's staySummaries entry for this stay
+   * - Patch the booking (fire-and-forget style — we log but don't fail the stay response)
+   */
+  stays: async (op, savedDoc, previousDoc) => {
+    try {
+      // Determine which booking(s) are affected.
+      // On delete the savedDoc is null, use previousDoc instead.
+      const stayDoc = savedDoc ?? previousDoc
+      if (!stayDoc) return
+
+      const bookingId: string | undefined = stayDoc.bookingId
+      if (!bookingId) return
+
+      const booking = await bookingService.getById(bookingId)
+      if (!booking) return
+
+      const currentSummaries: any[] = (booking as any).staySummaries ?? []
+      const stayId = typeof stayDoc._id === 'object'
+        ? (stayDoc._id.$oid ?? stayDoc._id.toString())
+        : String(stayDoc._id)
+
+      let nextSummaries: any[]
+
+      if (op === 'delete') {
+        // Remove this stay's summary entry
+        nextSummaries = currentSummaries.filter((s: any) => s.stayId !== stayId)
+      } else {
+        // Upsert: replace existing entry or append
+        const existingIndex = currentSummaries.findIndex((s: any) => s.stayId === stayId)
+        const summary = buildStaySummary(stayDoc)
+        if (existingIndex >= 0) {
+          nextSummaries = [...currentSummaries]
+          nextSummaries[existingIndex] = summary
+        } else {
+          nextSummaries = [...currentSummaries, summary]
+        }
+      }
+
+      await bookingService.update(bookingId, { staySummaries: nextSummaries } as any)
+    } catch (err) {
+      // Sync failure must not break the primary stay response
+      console.error('[crossEntitySync] stays → bookings sync failed:', err)
+    }
+  },
+}
+
 export function makeEntityController(entityKey: EntityKey) {
   const entry = entityRegistry[entityKey];
   const service = new MongoService(entityKey);
   const entityName = entry.name;
   const denormalize = denormalizations[entityKey]
+  const syncRelated = crossEntitySyncs[entityKey]
 
   return {
     async getAll(req: Request, res: Response, next: NextFunction) {
@@ -101,6 +173,7 @@ export function makeEntityController(entityKey: EntityKey) {
         const body = req.body;
         if (denormalize) await denormalize(body);
         const result = await service.create(body);
+        if (syncRelated) await syncRelated('upsert', result, null);
         res.status(201).json({ success: true, data: result });
       } catch (error) {
         next(error);
@@ -114,6 +187,7 @@ export function makeEntityController(entityKey: EntityKey) {
         if (denormalize && 'guestIds' in body) await denormalize(body);
         const result = await service.update(id, body);
         if (!result) throw new AppError(404, `${entityName} with ID ${id} not found`);
+        if (syncRelated) await syncRelated('upsert', result, null);
         res.json({ success: true, data: result });
       } catch (error) {
         next(error);
@@ -123,8 +197,11 @@ export function makeEntityController(entityKey: EntityKey) {
     async delete(req: Request, res: Response, next: NextFunction) {
       try {
         const { id } = req.params;
+        // Fetch before deleting so sync has the full document (including bookingId)
+        const docBeforeDelete = syncRelated ? await service.getById(id) : null;
         const deleted = await service.delete(id);
         if (!deleted) throw new AppError(404, `${entityName} with ID ${id} not found`);
+        if (syncRelated) await syncRelated('delete', null, docBeforeDelete);
         res.json({ success: true, data: { id } });
       } catch (error) {
         next(error);
