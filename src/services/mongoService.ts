@@ -6,6 +6,11 @@ import { maskEncryptedFields } from '../lib/crypto.js';
 let client: MongoClient | null = null;
 let db: Db | null = null;
 
+export function getMongoClient(): MongoClient {
+  if (!client) throw new Error('MongoDB not connected. Call connectMongo() first.');
+  return client;
+}
+
 export async function connectMongo(): Promise<void> {
   const connectionString = process.env.MONGOCONNECTIONSTRING;
   const dbName = process.env.MONGOCOLLECTION;
@@ -59,7 +64,16 @@ export class MongoService<T extends { _id?: any }> {
     const skipKeys = new Set(['page', 'pageSize', 'sortBy', 'sortOrder', 'search']);
     for (const [key, value] of Object.entries(filters)) {
       if (skipKeys.has(key)) continue;
-      if (value !== undefined && value !== null && value !== '') {
+      if (value === undefined || value === null || value === '') continue;
+
+      // Date range filter: { from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }
+      if (typeof value === 'object' && !Array.isArray(value) && 'from' in value && 'to' in value) {
+        const { from, to } = value as { from: string; to: string };
+        (query as any)[key] = {
+          $gte: from,
+          $lte: to,
+        };
+      } else {
         (query as any)[key] = value;
       }
     }
@@ -151,13 +165,15 @@ export class MongoService<T extends { _id?: any }> {
 
   async update(id: string, data: Partial<Omit<T, '_id'>>): Promise<T | null> {
     try {
+      const { _id, ...safeData } = data as any;
       const result = await this.collection.findOneAndUpdate(
         { _id: new ObjectId(id) } as Filter<T>,
-        { $set: data as any },
+        { $set: safeData },
         { returnDocument: 'after' }
       );
       return result as T | null;
-    } catch {
+    } catch (e) {
+      console.error('MongoService.update error:', e);
       return null;
     }
   }

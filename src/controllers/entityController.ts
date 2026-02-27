@@ -4,10 +4,33 @@ import type { PaginatedRequest } from '@boon-digital/rocket-admin-config/types/a
 import { entityRegistry, type EntityKey } from '@boon-digital/rocket-admin-config/registry.js';
 import { AppError } from '../middleware/errorHandler.js';
 
+// Per-entity write-time denormalization: called before create/update, mutates body in place
+type DenormalizeFn = (body: any) => Promise<void>
+
+const contactService = new MongoService('contacts')
+
+const denormalizations: Partial<Record<EntityKey, DenormalizeFn>> = {
+  stays: async (body: any) => {
+    const ids: string[] = body.guestIds ?? []
+    if (ids.length === 0) {
+      body.guestNames = []
+      return
+    }
+    const contacts = await contactService.getByIds(ids)
+    const contactMap = new Map(contacts.map((c: any) => {
+      const id = typeof c._id === 'object' ? c._id.toString() : String(c._id)
+      const name = [c.general?.firstName, c.general?.lastName].filter(Boolean).join(' ')
+      return [id, name]
+    }))
+    body.guestNames = ids.map((id) => contactMap.get(id) ?? id)
+  },
+}
+
 export function makeEntityController(entityKey: EntityKey) {
   const entry = entityRegistry[entityKey];
   const service = new MongoService(entityKey);
   const entityName = entry.name;
+  const denormalize = denormalizations[entityKey]
 
   return {
     async getAll(req: Request, res: Response, next: NextFunction) {
@@ -75,7 +98,9 @@ export function makeEntityController(entityKey: EntityKey) {
 
     async create(req: Request, res: Response, next: NextFunction) {
       try {
-        const result = await service.create(req.body);
+        const body = req.body;
+        if (denormalize) await denormalize(body);
+        const result = await service.create(body);
         res.status(201).json({ success: true, data: result });
       } catch (error) {
         next(error);
@@ -85,7 +110,9 @@ export function makeEntityController(entityKey: EntityKey) {
     async update(req: Request, res: Response, next: NextFunction) {
       try {
         const { id } = req.params;
-        const result = await service.update(id, req.body);
+        const body = req.body;
+        if (denormalize && 'guestIds' in body) await denormalize(body);
+        const result = await service.update(id, body);
         if (!result) throw new AppError(404, `${entityName} with ID ${id} not found`);
         res.json({ success: true, data: result });
       } catch (error) {

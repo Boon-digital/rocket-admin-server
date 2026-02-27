@@ -3,9 +3,15 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import session from 'express-session';
+import passport from 'passport';
+import ConnectMongoDBSession from 'connect-mongodb-session';
 import { router } from './routes/index.js';
+import { authRouter, configurePassport } from './routes/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
-import { connectMongo } from './services/mongoService.js';
+import { requireAuth } from './middleware/auth.js';
+import { connectMongo, getMongoClient } from './services/mongoService.js';
+import { initUserService } from './services/userService.js';
 
 // Load environment variables (.env.local takes precedence over .env)
 dotenv.config({ path: '../.env.local' });
@@ -14,18 +20,21 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 const API_PREFIX = process.env.API_PREFIX || '/api/v1';
+const AUTH_ENABLED = process.env.AUTH_ENABLED === 'true';
 
 // Middleware
-app.use(helmet()); // Security headers
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-  credentials: true,
-}));
-app.use(morgan('dev')); // Logging
-app.use(express.json()); // Parse JSON bodies
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
+app.use(helmet());
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    credentials: true,
+  })
+);
+app.use(morgan('dev'));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Health check endpoint
+// Health check (public)
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
@@ -34,15 +43,63 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// API routes
-app.use(API_PREFIX, router);
+// ─── Auth setup (only when AUTH_ENABLED=true) ────────────────────────────────
+async function setupAuth(): Promise<void> {
+  if (!AUTH_ENABLED) return;
 
-// Error handling middleware (must be last)
-app.use(errorHandler);
+  const mongoClient = getMongoClient();
+  const dbName = process.env.MONGOCOLLECTION!;
 
-// Connect to MongoDB then start server
+  // Initialize user service with the existing MongoDB connection
+  initUserService(mongoClient, dbName);
+
+  // MongoDB-backed session store
+  const MongoDBStore = ConnectMongoDBSession(session);
+  const store = new MongoDBStore({
+    uri: process.env.MONGOCONNECTIONSTRING!,
+    databaseName: dbName,
+    collection: 'sessions',
+  });
+
+  store.on('error', (err) => console.error('Session store error:', err));
+
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET || 'change-me-in-production',
+      resave: false,
+      saveUninitialized: false,
+      store,
+      cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      },
+    })
+  );
+
+  app.use(passport.initialize());
+  app.use(passport.session());
+
+  configurePassport();
+
+  // Auth routes mounted outside the API prefix (public — handles OAuth redirects)
+  app.use('/auth', authRouter);
+
+  console.log('🔐 Auth enabled (Google + Microsoft OAuth)');
+}
+
+// ─── Bootstrap ───────────────────────────────────────────────────────────────
 connectMongo()
-  .then(() => {
+  .then(async () => {
+    await setupAuth();
+
+    // API routes (protected when AUTH_ENABLED)
+    app.use(API_PREFIX, requireAuth, router);
+
+    // Error handling (must be last)
+    app.use(errorHandler);
+
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`📝 API available at http://localhost:${PORT}${API_PREFIX}`);
@@ -50,6 +107,6 @@ connectMongo()
     });
   })
   .catch((err) => {
-    console.error('Failed to connect to MongoDB:', err);
+    console.error('Failed to start server:', err);
     process.exit(1);
   });

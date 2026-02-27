@@ -8,7 +8,6 @@ interface Stay {
   checkInDate: string;
   checkOutDate: string;
   guestIds?: string[];
-  guestNames?: string[];
   hotelId?: string;
   hotelName?: string;
   hotelConfirmationNo?: string;
