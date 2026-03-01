@@ -190,19 +190,29 @@ export class MockDataService<T extends BaseEntity> {
    */
   async search(query: string, limit = 10): Promise<T[]> {
     const data = await this.loadData();
-    const searchLower = query.toLowerCase();
+    const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+
+    // Collect all leaf string values from an item (one level of nesting)
+    const leafValues = (item: T): string[] => {
+      const values: string[] = [];
+      for (const value of Object.values(item as any)) {
+        if (typeof value === 'object' && value !== null) {
+          for (const v of Object.values(value as any)) {
+            values.push(String(v).toLowerCase());
+          }
+        } else {
+          values.push(String(value).toLowerCase());
+        }
+      }
+      return values;
+    };
 
     return data
-      .filter((item) =>
-        Object.values(item).some((value) => {
-          if (typeof value === 'object' && value !== null) {
-            return Object.values(value).some((v) =>
-              String(v).toLowerCase().includes(searchLower)
-            );
-          }
-          return String(value).toLowerCase().includes(searchLower);
-        })
-      )
+      .filter((item) => {
+        const leaves = leafValues(item);
+        // Every token must match at least one leaf value
+        return tokens.every((token) => leaves.some((v) => v.includes(token)));
+      })
       .slice(0, limit);
   }
 

@@ -54,10 +54,16 @@ export class MongoService<T extends { _id?: any }> {
 
     const query: Filter<T> = {};
 
-    // Text search across searchFields using $or / $regex
+    // Text search across searchFields using $regex, multi-word queries use AND logic
     if (search && search.trim() !== '') {
-      const regex = { $regex: search, $options: 'i' };
-      (query as any).$or = this.searchFields.map((field) => ({ [field]: regex }));
+      const tokens = search.trim().split(/\s+/).filter(Boolean);
+      if (tokens.length <= 1) {
+        (query as any).$or = this.searchFields.map((field) => ({ [field]: { $regex: search, $options: 'i' } }));
+      } else {
+        (query as any).$and = tokens.map((token) => ({
+          $or: this.searchFields.map((field) => ({ [field]: { $regex: token, $options: 'i' } })),
+        }));
+      }
     }
 
     // Additional filters (from query params) - skip pagination/sort keys
@@ -82,9 +88,8 @@ export class MongoService<T extends { _id?: any }> {
     const totalPages = Math.ceil(totalItems / pageSize);
     const skip = (page - 1) * pageSize;
 
-    const sortSpec: Record<string, 1 | -1> = sortBy
-      ? { [sortBy]: sortOrder === 'desc' ? -1 : 1 }
-      : {};
+    const sortDir = sortOrder === 'desc' ? -1 : 1
+    const sortSpec: Record<string, 1 | -1> = sortBy ? { [sortBy]: sortDir } : {};
 
     const data = (await this.collection
       .find(query)
@@ -139,10 +144,10 @@ export class MongoService<T extends { _id?: any }> {
   }
 
   async search(query: string, limit = 10): Promise<T[]> {
-    const regex = { $regex: query, $options: 'i' };
-    const filter: Filter<T> = {
-      $or: this.searchFields.map((field) => ({ [field]: regex })),
-    } as Filter<T>;
+    const tokens = query.trim().split(/\s+/).filter(Boolean);
+    const filter: Filter<T> = tokens.length <= 1
+      ? { $or: this.searchFields.map((field) => ({ [field]: { $regex: query, $options: 'i' } })) } as Filter<T>
+      : { $and: tokens.map((token) => ({ $or: this.searchFields.map((field) => ({ [field]: { $regex: token, $options: 'i' } })) })) } as Filter<T>;
 
     const results = await this.collection.find(filter).limit(limit).toArray() as T[];
     return results.map(maskEncryptedFields);
@@ -150,7 +155,10 @@ export class MongoService<T extends { _id?: any }> {
 
   async findByField(field: string, value: string): Promise<T[]> {
     try {
-      const filter = { [field]: value } as Filter<T>;
+      const isValidObjectId = ObjectId.isValid(value) && String(new ObjectId(value)) === value
+      const filter = isValidObjectId
+        ? { $or: [{ [field]: value }, { [field]: new ObjectId(value) }] } as Filter<T>
+        : { [field]: value } as Filter<T>
       const results = await this.collection.find(filter).toArray() as T[];
       return results.map(maskEncryptedFields);
     } catch {

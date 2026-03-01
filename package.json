@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@boon-digital/rocket-admin-config": "^1.0.0",
+    "@vercel/blob": "^2.3.0",
     "connect-mongodb-session": "^5.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -21,6 +22,7 @@
     "helmet": "^7.1.0",
     "mongodb": "^6.12.0",
     "morgan": "^1.10.0",
+    "node-cron": "^3.0.3",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "passport-microsoft": "^2.1.0",
@@ -33,6 +35,7 @@
     "@types/express-session": "^1.18.2",
     "@types/morgan": "^1.9.9",
     "@types/node": "^22.10.5",
+    "@types/node-cron": "^3.0.11",
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.17",
     "@types/passport-microsoft": "^2.1.1",

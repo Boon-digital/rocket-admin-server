@@ -6,12 +6,16 @@ import dotenv from 'dotenv';
 import session from 'express-session';
 import passport from 'passport';
 import ConnectMongoDBSession from 'connect-mongodb-session';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { router } from './routes/index.js';
 import { authRouter, configurePassport } from './routes/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requireAuth } from './middleware/auth.js';
 import { connectMongo, getMongoClient } from './services/mongoService.js';
 import { initUserService } from './services/userService.js';
+import { initEntityHooks } from './config/entityHooks.js';
+import { initStayStatusCron } from './jobs/stayStatusCron.js';
 
 // Load environment variables (.env.local takes precedence over .env)
 dotenv.config({ path: '../.env.local' });
@@ -33,6 +37,10 @@ app.use(
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Local dev: serve uploaded files from disk
+const uploadsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../uploads');
+app.use('/uploads', express.static(uploadsDir));
 
 // Health check (public)
 app.get('/health', (_req, res) => {
@@ -93,6 +101,8 @@ async function setupAuth(): Promise<void> {
 connectMongo()
   .then(async () => {
     await setupAuth();
+    initEntityHooks();
+    initStayStatusCron();
 
     // API routes (protected when AUTH_ENABLED)
     app.use(API_PREFIX, requireAuth, router);

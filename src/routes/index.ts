@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { entityRegistry, type EntityKey } from '@boon-digital/rocket-admin-config/registry.js';
 import { makeEntityController } from '../controllers/entityController.js';
 import { credentialsRouter } from './credentials.js';
+import { uploadRouter } from './upload.js';
 
 export const router = Router();
 
@@ -26,6 +27,9 @@ for (const [key, entry] of Object.entries(entityRegistry) as [EntityKey, typeof 
 
 // Credentials (encrypt/decrypt)
 router.use('/credentials', credentialsRouter);
+
+// File uploads (Vercel Blob proxy)
+router.use('/upload', uploadRouter);
 
 // API info endpoint
 router.get('/', (_req, res) => {

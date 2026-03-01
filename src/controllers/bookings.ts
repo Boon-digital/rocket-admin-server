@@ -94,4 +94,5 @@ export const bookingsController = {
       next(error);
     }
   },
+
 };
