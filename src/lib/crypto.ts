@@ -3,7 +3,6 @@ import { ObjectId } from 'mongodb';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // 96-bit IV recommended for GCM
-const TAG_LENGTH = 16;
 const ENCODING = 'base64url';
 const PREFIX = 'enc:v1:';
 
@@ -79,14 +78,14 @@ export function encryptFields<T extends Record<string, any>>(
   data: T,
   passwordFields: Set<string>
 ): T {
-  const result = { ...data };
+  const result: Record<string, any> = { ...data };
   for (const key of passwordFields) {
     const value = result[key];
     if (typeof value === 'string' && value.length > 0 && !isEncrypted(value)) {
       result[key] = encrypt(value);
     }
   }
-  return result;
+  return result as T;
 }
 
 /**
@@ -95,7 +94,7 @@ export function encryptFields<T extends Record<string, any>>(
  * Use this before sending documents to the client.
  */
 export function maskEncryptedFields<T extends Record<string, any>>(data: T): T {
-  const result = { ...data };
+  const result: Record<string, any> = { ...data };
   for (const key of Object.keys(result)) {
     const value = result[key];
     if (value instanceof ObjectId) {
@@ -106,5 +105,5 @@ export function maskEncryptedFields<T extends Record<string, any>>(data: T): T {
       result[key] = maskEncryptedFields(value);
     }
   }
-  return result;
+  return result as T;
 }

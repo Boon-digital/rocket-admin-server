@@ -47,9 +47,10 @@ async function runStayStatusUpdate(): Promise<void> {
       if (allStays.length === 0) {
         const summaryIds: string[] = ((booking as any).staySummaries ?? []).map((s: any) => s.stayId).filter(Boolean)
         if (summaryIds.length > 0) {
-          allStays = await staysCol.find({
-            _id: { $in: summaryIds.map((id) => { try { return new ObjectId(id) } catch { return id } }) }
-          }).toArray()
+          const objectIds = summaryIds.flatMap((id) => { try { return [new ObjectId(id)] } catch { return [] } })
+          allStays = objectIds.length > 0
+            ? await staysCol.find({ _id: { $in: objectIds } }).toArray()
+            : []
         }
       }
 
