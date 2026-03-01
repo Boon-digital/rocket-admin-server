@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { entityRegistry, type EntityKey } from '@boon-digital/rocket-admin-config/registry.js';
+import { getRegistry } from '../lib/registry.js';
 import { makeEntityController } from '../controllers/entityController.js';
 import { credentialsRouter } from './credentials.js';
 import { uploadRouter } from './upload.js';
@@ -7,7 +7,7 @@ import { uploadRouter } from './upload.js';
 export const router = Router();
 
 // Mount entity routers dynamically from registry
-for (const [key, entry] of Object.entries(entityRegistry) as [EntityKey, typeof entityRegistry[EntityKey]][]) {
+for (const [key, entry] of Object.entries(getRegistry())) {
   if (!entry.enabled) continue;
 
   const controller = makeEntityController(key);
@@ -33,8 +33,9 @@ router.use('/upload', uploadRouter);
 
 // API info endpoint
 router.get('/', (_req, res) => {
+  const registry = getRegistry();
   const endpoints = Object.fromEntries(
-    Object.entries(entityRegistry)
+    Object.entries(registry)
       .filter(([, entry]) => entry.enabled)
       .map(([key, entry]) => [key, entry.route])
   );

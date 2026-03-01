@@ -1,9 +1,16 @@
 {
-  "name": "admin-template-server",
-  "version": "1.0.0",
+  "name": "@boon-digital/rocket-admin-server",
+  "version": "1.0.1",
   "description": "Backend API for admin template",
   "type": "module",
   "main": "dist/index.js",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "files": [
+    "dist/**"
+  ],
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
@@ -12,7 +19,6 @@
     "format": "prettier --write \"src/**/*.ts\""
   },
   "dependencies": {
-    "@boon-digital/rocket-admin-config": "file:../config",
     "@vercel/blob": "^2.3.0",
     "connect-mongodb-session": "^5.0.0",
     "cors": "^2.8.5",

@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { MongoService } from '../services/mongoService.js';
-import type { PaginatedRequest } from '@boon-digital/rocket-admin-config/types/api.js';
-import { entityRegistry, type EntityKey } from '@boon-digital/rocket-admin-config/registry.js';
+import type { PaginatedRequest } from '../types/api.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { registerConfig, getRegistry } from '../lib/registry.js';
+
+export { registerConfig, getRegistry };
 
 // Per-entity write-time denormalization: called before create/update, mutates body in place
 // id is provided on update (undefined on create)
@@ -16,14 +18,14 @@ export type CrossEntitySyncFn = (op: 'upsert' | 'delete', savedDoc: any | null, 
 
 // Registerable hook maps — populated by calling registerDenormalization / registerCrossEntitySync
 // before the server starts handling requests. Empty by default so the shared server works without miceflow-specific logic.
-const denormalizations: Partial<Record<EntityKey, DenormalizeFn>> = {}
-const crossEntitySyncs: Partial<Record<EntityKey, CrossEntitySyncFn>> = {}
+const denormalizations: Partial<Record<string, DenormalizeFn>> = {}
+const crossEntitySyncs: Partial<Record<string, CrossEntitySyncFn>> = {}
 
 /**
  * Register a denormalization function for an entity key.
  * Call this at startup (e.g. from src/config/entityHooks.ts) before the server begins serving requests.
  */
-export function registerDenormalization(key: EntityKey, fn: DenormalizeFn): void {
+export function registerDenormalization(key: string, fn: DenormalizeFn): void {
   denormalizations[key] = fn
 }
 
@@ -31,13 +33,13 @@ export function registerDenormalization(key: EntityKey, fn: DenormalizeFn): void
  * Register a cross-entity sync function for an entity key.
  * Call this at startup (e.g. from src/config/entityHooks.ts) before the server begins serving requests.
  */
-export function registerCrossEntitySync(key: EntityKey, fn: CrossEntitySyncFn): void {
+export function registerCrossEntitySync(key: string, fn: CrossEntitySyncFn): void {
   crossEntitySyncs[key] = fn
 }
 
 
-export function makeEntityController(entityKey: EntityKey) {
-  const entry = entityRegistry[entityKey];
+export function makeEntityController(entityKey: string) {
+  const entry = getRegistry()[entityKey];
   const service = new MongoService(entityKey);
   const entityName = entry.name;
   // Look up hooks dynamically so registrations made after this call are still used

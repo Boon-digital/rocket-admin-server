@@ -1,8 +1,9 @@
 import { readFile, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import type { PaginatedRequest, PaginatedResponse } from '@boon-digital/rocket-admin-config/types/api.js';
-import { MOCKDATA_DIR_DEFAULT } from '@boon-digital/rocket-admin-config/registry.js';
+import type { PaginatedRequest, PaginatedResponse } from '../types/api.js';
+
+const MOCKDATA_DIR_DEFAULT = 'MOCKDATA';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

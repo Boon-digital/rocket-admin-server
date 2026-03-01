@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { MongoService } from '../services/mongoService.js';
 import { decrypt, isEncrypted } from '../lib/crypto.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { entityRegistry, type EntityKey } from '@boon-digital/rocket-admin-config/registry.js';
+import { getRegistry } from '../lib/registry.js';
 
 /**
  * POST /credentials/decrypt
@@ -21,11 +21,11 @@ export async function decryptCredential(req: Request, res: Response, next: NextF
       throw new AppError(400, 'entity, id and field are required');
     }
 
-    if (!(entity in entityRegistry)) {
+    if (!(entity in getRegistry())) {
       throw new AppError(400, `Unknown entity: ${entity}`);
     }
 
-    const service = new MongoService(entity as EntityKey);
+    const service = new MongoService(entity);
     const document = await service.getRawById(id) as Record<string, any> | null;
 
     if (!document) {

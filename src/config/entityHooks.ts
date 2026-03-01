@@ -12,10 +12,6 @@
 import { MongoService } from '../services/mongoService.js'
 import { registerDenormalization, registerCrossEntitySync } from '../controllers/entityController.js'
 
-const contactService = new MongoService('contacts')
-const bookingService = new MongoService('bookings')
-const stayService = new MongoService('stays')
-
 // ─── Status computation ────────────────────────────────────────────────────────
 
 export function computeStayStatus(stay: any): { status: string; subStatus: string | null } {
@@ -170,6 +166,10 @@ function buildStaySummary(stay: any): object {
 // ─── Hook registration ─────────────────────────────────────────────────────────
 
 export function initEntityHooks(): void {
+  const contactService = new MongoService('contacts')
+  const bookingService = new MongoService('bookings')
+  const stayService = new MongoService('stays')
+
   // bookings: recompute travelPeriod + booking status on every write
   registerDenormalization('bookings', async (body, id) => {
     const summaries: any[] = body.staySummaries ?? []

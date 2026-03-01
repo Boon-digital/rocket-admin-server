@@ -1,6 +1,6 @@
 import { MongoClient, ObjectId, type Db, type Filter } from 'mongodb';
-import type { PaginatedRequest, PaginatedResponse } from '@boon-digital/rocket-admin-config/types/api.js';
-import { entityRegistry, type EntityKey } from '@boon-digital/rocket-admin-config/registry.js';
+import type { PaginatedRequest, PaginatedResponse } from '../types/api.js';
+import { getRegistry } from '../lib/registry.js';
 import { maskEncryptedFields } from '../lib/crypto.js';
 
 let client: MongoClient | null = null;
@@ -33,9 +33,9 @@ export class MongoService<T extends { _id?: any }> {
   private readonly collectionName: string;
   private readonly searchFields: string[];
 
-  constructor(entityKey: EntityKey) {
+  constructor(entityKey: string) {
     this.collectionName = entityKey;
-    this.searchFields = entityRegistry[entityKey].searchFields;
+    this.searchFields = getRegistry()[entityKey].searchFields;
   }
 
   private get collection() {

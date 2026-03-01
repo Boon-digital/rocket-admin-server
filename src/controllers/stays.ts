@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { MockDataService } from '../services/mockDataService.js';
-import type { PaginatedRequest } from '@boon-digital/rocket-admin-config/types/api.js';
+import type { PaginatedRequest } from '../types/api.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 interface Stay {
