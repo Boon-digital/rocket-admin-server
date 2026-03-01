@@ -12,7 +12,7 @@
     "format": "prettier --write \"src/**/*.ts\""
   },
   "dependencies": {
-    "@boon-digital/rocket-admin-config": "^1.0.0",
+    "@boon-digital/rocket-admin-config": "file:../config",
     "@vercel/blob": "^2.3.0",
     "connect-mongodb-session": "^5.0.0",
     "cors": "^2.8.5",
