@@ -113,7 +113,7 @@ authRouter.get('/google/callback', (req: Request, res: Response, next) => {
   req.session.userId = user._id?.toString();
   req.session.userEmail = user.email;
   req.session.userName = user.name;
-  res.redirect(successRedirect());
+  req.session.save(() => res.redirect(successRedirect()));
 });
 
 // Microsoft
@@ -126,12 +126,11 @@ authRouter.get('/microsoft/callback', (req: Request, res: Response, next) => {
   passport.authenticate('microsoft', { failureRedirect: failureRedirect() })(req, res, next);
 }, (req: Request, res: Response) => {
   const user = req.user as any;
-    req.session.userId = user._id?.toString();
-    req.session.userEmail = user.email;
-    req.session.userName = user.name;
-    res.redirect(successRedirect());
-  }
-);
+  req.session.userId = user._id?.toString();
+  req.session.userEmail = user.email;
+  req.session.userName = user.name;
+  req.session.save(() => res.redirect(successRedirect()));
+});
 
 // Current user
 authRouter.get('/me', (req: Request, res: Response) => {
