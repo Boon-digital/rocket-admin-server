@@ -37,6 +37,9 @@ export async function start(registry: Record<string, EntityRegistryEntry>): Prom
   const API_PREFIX = process.env.API_PREFIX || '/api/v1';
   const AUTH_ENABLED = process.env.AUTH_ENABLED === 'true';
 
+  // Trust Railway's reverse proxy so req.secure is correct and cookies work
+  app.set('trust proxy', 1);
+
   // Middleware
   app.use(helmet());
   app.use(
