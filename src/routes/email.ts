@@ -153,6 +153,8 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
     sentBy: sentBy ?? req.session?.userEmail ?? 'unknown',
     sentAt: new Date(),
     status,
+    html,
+    pdfFilename: pdfFilename ?? null,
     ...(errorMessage ? { errorMessage } : {}),
     ...(resendId ? { resendId } : {}),
   };

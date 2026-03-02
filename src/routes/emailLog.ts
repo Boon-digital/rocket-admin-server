@@ -28,3 +28,16 @@ emailLogRouter.get('/logs', async (req: Request, res: Response): Promise<void> =
     pagination: { page, pageSize, totalItems, totalPages },
   });
 });
+
+// GET /api/v1/email/logs/:id
+emailLogRouter.get('/logs/:id', async (req: Request, res: Response): Promise<void> => {
+  const { ObjectId } = await import('mongodb');
+  const client = getMongoClient();
+  const db = client.db(process.env.MONGOCOLLECTION!);
+  const doc = await db.collection('email_logs').findOne({ _id: new ObjectId(req.params.id) });
+  if (!doc) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+  res.json(doc);
+});
