@@ -99,6 +99,16 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
   const db = client.db(process.env.MONGOCOLLECTION!);
   const emailLogsCollection = db.collection('email_logs');
 
+  // ─── TEST GUARD ────────────────────────────────────────────────────────────
+  // During testing, override the recipient so no real bookers receive emails.
+  // Remove this block (and the TEST_EMAIL_OVERRIDE env var) when going live.
+  const testOverride = process.env.TEST_EMAIL_OVERRIDE;
+  const effectiveTo = testOverride ?? to;
+  if (testOverride) {
+    console.log(`[email] TEST_EMAIL_OVERRIDE active — redirecting ${to} → ${testOverride}`);
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
   const subject = `Your hotel confirmation: ${confirmationNo ?? ''}`;
   const html = buildEmailHtml(bookerName ?? 'Guest', confirmationNo ?? '', staySummaries ?? []);
 
@@ -117,7 +127,7 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
 
     const result = await resend.emails.send({
       from: 'Corporate Meeting Partner <donotreply@develop-digital.nl>',
-      to: [to],
+      to: [effectiveTo],
       bcc: ['donotreply@develop-digital.nl'],
       subject,
       html,
