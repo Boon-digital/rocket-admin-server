@@ -3,12 +3,14 @@ import { getRegistry } from '../lib/registry.js';
 import { makeEntityController } from '../controllers/entityController.js';
 import { credentialsRouter } from './credentials.js';
 import { uploadRouter } from './upload.js';
+import { emailRouter } from './email.js';
+import { emailLogRouter } from './emailLog.js';
 
 export const router = Router();
 
 // Mount entity routers dynamically from registry
 for (const [key, entry] of Object.entries(getRegistry())) {
-  if (!entry.enabled) continue;
+  if (!entry.enabled || (entry as any).isCustomRoute) continue;
 
   const controller = makeEntityController(key);
   const entityRouter = Router();
@@ -30,6 +32,10 @@ router.use('/credentials', credentialsRouter);
 
 // File uploads (Vercel Blob proxy)
 router.use('/upload', uploadRouter);
+
+// Email send + log
+router.use('/email', emailRouter);
+router.use('/email', emailLogRouter);
 
 // API info endpoint
 router.get('/', (_req, res) => {

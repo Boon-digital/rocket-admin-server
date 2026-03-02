@@ -1,6 +1,6 @@
 {
   "name": "@boon-digital/rocket-admin-server",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Backend API for admin template",
   "type": "module",
   "main": "dist/index.js",
@@ -32,6 +32,7 @@
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "passport-microsoft": "^2.1.0",
+    "resend": "^6.9.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
