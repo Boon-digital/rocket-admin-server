@@ -111,13 +111,20 @@ documentsRouter.get('/presign', requireAuth, async (req: Request, res: Response)
       return;
     }
 
+    // If R2 credentials aren't configured, or the URL is already a public URL
+    // (served via R2_PUBLIC_URL custom domain or localhost), return it as-is
     if (isLocalMode()) {
-      // In local mode just return the URL as-is
       res.json({ url: rawKey });
       return;
     }
 
-    // Extract the object key from a full URL or use as-is
+    const publicBase = process.env.R2_PUBLIC_URL;
+    if (publicBase && rawKey.startsWith(publicBase)) {
+      res.json({ url: rawKey });
+      return;
+    }
+
+    // Extract the object key from a full private R2 URL or use as-is
     let objectKey = rawKey;
     try {
       const parsed = new URL(rawKey);
