@@ -1,6 +1,39 @@
 import { Router, type Request, type Response } from 'express';
 import { Resend } from 'resend';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getMongoClient } from '../services/mongoService.js';
+
+const LOCAL_UPLOADS_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../uploads'
+);
+
+function isLocalMode(): boolean {
+  return !process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY;
+}
+
+function getR2Client(): S3Client {
+  return new S3Client({
+    region: 'auto',
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+    },
+  });
+}
+
+function getPublicUrl(key: string): string {
+  const bucket = process.env.R2_BUCKET!;
+  const accountId = process.env.R2_ACCOUNT_ID!;
+  if (process.env.R2_PUBLIC_URL) {
+    return `${process.env.R2_PUBLIC_URL}/${key}`;
+  }
+  return `https://${bucket}.${accountId}.r2.cloudflarestorage.com/${key}`;
+}
 
 export const emailRouter = Router();
 
@@ -167,15 +200,62 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
     return;
   }
 
-  // Patch booking with sent timestamp
+  // Patch booking with sent timestamp (and optionally save PDF to documents)
   try {
     const { ObjectId } = await import('mongodb');
     const bookingsCollection = db.collection('bookings');
     const bookingObjectId = new ObjectId(bookingId);
-    await bookingsCollection.updateOne(
-      { _id: bookingObjectId },
-      { $set: { confirmationSent: true, confirmationSentAt: logEntry.sentAt } },
-    );
+
+    if (pdfBase64 && pdfFilename) {
+      console.log('[email] Saving PDF to documents, local mode:', isLocalMode());
+      const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+      const sanitized = pdfFilename.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const key = `${Date.now()}-${sanitized}`;
+      let uploadedUrl: string;
+
+      if (isLocalMode()) {
+        await fs.mkdir(LOCAL_UPLOADS_DIR, { recursive: true });
+        await fs.writeFile(path.join(LOCAL_UPLOADS_DIR, key), pdfBuffer);
+        const port = process.env.PORT || 3001;
+        uploadedUrl = `http://localhost:${port}/uploads/${key}`;
+        console.log('[email] PDF written to disk:', key);
+      } else {
+        const client = getR2Client();
+        await client.send(new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET!,
+          Key: key,
+          Body: pdfBuffer,
+          ContentType: 'application/pdf',
+        }));
+        uploadedUrl = getPublicUrl(key);
+        console.log('[email] PDF uploaded to R2:', key);
+      }
+
+      const newDoc = {
+        id: key,
+        name: pdfFilename,
+        size: pdfBuffer.length,
+        type: 'application/pdf',
+        url: uploadedUrl,
+        uploadedAt: logEntry.sentAt.toISOString(),
+        uploadedBy: logEntry.sentBy,
+      };
+
+      const updateResult = await bookingsCollection.updateOne(
+        { _id: bookingObjectId },
+        {
+          $set: { confirmationSent: true, confirmationSentAt: logEntry.sentAt },
+          $push: { documents: newDoc },
+        },
+      );
+      console.log('[email] Booking patch result:', updateResult.matchedCount, 'matched,', updateResult.modifiedCount, 'modified');
+    } else {
+      console.log('[email] No PDF provided, skipping document save (pdfBase64:', !!pdfBase64, 'pdfFilename:', !!pdfFilename, ')');
+      await bookingsCollection.updateOne(
+        { _id: bookingObjectId },
+        { $set: { confirmationSent: true, confirmationSentAt: logEntry.sentAt } },
+      );
+    }
   } catch (err) {
     console.error('[email] Failed to patch booking confirmationSentAt:', err);
   }
