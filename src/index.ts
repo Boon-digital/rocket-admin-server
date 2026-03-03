@@ -96,6 +96,7 @@ export async function start(registry: Record<string, EntityRegistryEntry>): Prom
           secure: process.env.NODE_ENV === 'production',
           maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
           sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+          domain: process.env.SESSION_COOKIE_DOMAIN,
         },
       })
     );
