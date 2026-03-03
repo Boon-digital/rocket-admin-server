@@ -89,7 +89,11 @@ export class MongoService<T extends { _id?: any }> {
     const skip = (page - 1) * pageSize;
 
     const sortDir = sortOrder === 'desc' ? -1 : 1
-    const sortSpec: Record<string, 1 | -1> = sortBy ? { [sortBy]: sortDir } : {};
+    const sortSpec: Record<string, 1 | -1> = sortBy
+      ? sortBy === 'status'
+        ? { status: sortDir, subStatus: sortDir }
+        : { [sortBy]: sortDir }
+      : {};
 
     const data = (await this.collection
       .find(query)
