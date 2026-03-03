@@ -39,7 +39,7 @@ function buildEmailHtml(bookerName: string, _confirmationNo: string, staySummari
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 </head>
-<body style="font-family: Arial, sans-serif; color: #111827; max-width: 600px; margin: 0 auto; padding: 24px;">
+<body style="font-family: Arial, sans-serif; color: #000000; max-width: 600px; margin: 0 auto; padding: 24px;">
   <p>Dear ${bookerName},</p>
 
   <p>Thank you for making your reservation with us. Please find attached your booking confirmation for the following details:</p>
