@@ -246,7 +246,7 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
         {
           $set: { confirmationSent: true, confirmationSentAt: logEntry.sentAt },
           $push: { documents: newDoc },
-        },
+        } as any,
       );
       console.log('[email] Booking patch result:', updateResult.matchedCount, 'matched,', updateResult.modifiedCount, 'modified');
     } else {
