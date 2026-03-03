@@ -167,5 +167,18 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
     return;
   }
 
+  // Patch booking with sent timestamp
+  try {
+    const { ObjectId } = await import('mongodb');
+    const bookingsCollection = db.collection('bookings');
+    const bookingObjectId = new ObjectId(bookingId);
+    await bookingsCollection.updateOne(
+      { _id: bookingObjectId },
+      { $set: { confirmationSent: true, confirmationSentAt: logEntry.sentAt } },
+    );
+  } catch (err) {
+    console.error('[email] Failed to patch booking confirmationSentAt:', err);
+  }
+
   res.json({ success: true, emailLogId });
 });
