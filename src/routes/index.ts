@@ -5,6 +5,7 @@ import { credentialsRouter } from './credentials.js';
 import { uploadRouter } from './upload.js';
 import { emailRouter } from './email.js';
 import { emailLogRouter } from './emailLog.js';
+import { documentsRouter } from './documents.js';
 
 export const router = Router();
 
@@ -36,6 +37,9 @@ router.use('/upload', uploadRouter);
 // Email send + log
 router.use('/email', emailRouter);
 router.use('/email', emailLogRouter);
+
+// Documents (aggregated across bookings)
+router.use('/documents', documentsRouter);
 
 // API info endpoint
 router.get('/', (_req, res) => {
