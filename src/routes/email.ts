@@ -113,7 +113,7 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
     staySummaries,
     pdfBase64,
     pdfFilename,
-    sentBy,
+    sentBy: sentByBody,
   } = req.body;
 
   if (!to || !bookingId) {
@@ -148,6 +148,7 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
   let status: 'sent' | 'failed' = 'sent';
   let errorMessage: string | undefined;
   let resendId: string | undefined;
+  let pdfUrl: string | undefined;
 
   try {
     const attachments = [];
@@ -171,42 +172,27 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
       throw new Error(result.error.message);
     }
 
-    resendId = result.data?.id;
+    if (!result.data?.id) {
+      throw new Error('Resend returned no email ID — treat as failed');
+    }
+
+    resendId = result.data.id;
   } catch (err: any) {
     status = 'failed';
     errorMessage = err?.message ?? 'Unknown error';
     console.error('[email] Send failed:', errorMessage);
   }
 
-  // Save log entry regardless of outcome
-  const logEntry = {
-    bookingId,
-    confirmationNo: confirmationNo ?? '',
-    to,
-    sentBy: sentBy ?? req.session?.userEmail ?? 'unknown',
-    sentAt: new Date(),
-    status,
-    html,
-    pdfFilename: pdfFilename ?? null,
-    ...(errorMessage ? { errorMessage } : {}),
-    ...(resendId ? { resendId } : {}),
-  };
+  const sentAt = new Date();
+  const sentBy = sentByBody ?? req.session?.userEmail ?? 'unknown';
 
-  const insertResult = await emailLogsCollection.insertOne(logEntry);
-  const emailLogId = insertResult.insertedId.toString();
+  // Upload PDF and patch booking (only on success)
+  if (status === 'sent' && pdfBase64 && pdfFilename) {
+    try {
+      const { ObjectId } = await import('mongodb');
+      const bookingsCollection = db.collection('bookings');
+      const bookingObjectId = new ObjectId(bookingId);
 
-  if (status === 'failed') {
-    res.status(500).json({ success: false, emailLogId, error: errorMessage });
-    return;
-  }
-
-  // Patch booking with sent timestamp (and optionally save PDF to documents)
-  try {
-    const { ObjectId } = await import('mongodb');
-    const bookingsCollection = db.collection('bookings');
-    const bookingObjectId = new ObjectId(bookingId);
-
-    if (pdfBase64 && pdfFilename) {
       console.log('[email] Saving PDF to documents, local mode:', isLocalMode());
       const pdfBuffer = Buffer.from(pdfBase64, 'base64');
       const sanitized = pdfFilename.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -220,8 +206,8 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
         uploadedUrl = `http://localhost:${port}/uploads/${key}`;
         console.log('[email] PDF written to disk:', key);
       } else {
-        const client = getR2Client();
-        await client.send(new PutObjectCommand({
+        const r2 = getR2Client();
+        await r2.send(new PutObjectCommand({
           Bucket: process.env.R2_BUCKET!,
           Key: key,
           Body: pdfBuffer,
@@ -231,33 +217,65 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
         console.log('[email] PDF uploaded to R2:', key);
       }
 
+      pdfUrl = uploadedUrl;
+
       const newDoc = {
         id: key,
         name: pdfFilename,
         size: pdfBuffer.length,
         type: 'application/pdf',
         url: uploadedUrl,
-        uploadedAt: logEntry.sentAt.toISOString(),
-        uploadedBy: logEntry.sentBy,
+        uploadedAt: sentAt.toISOString(),
+        uploadedBy: sentBy,
       };
 
       const updateResult = await bookingsCollection.updateOne(
         { _id: bookingObjectId },
         {
-          $set: { confirmationSent: true, confirmationSentAt: logEntry.sentAt },
+          $set: { confirmationSent: true, confirmationSentAt: sentAt },
           $push: { documents: newDoc },
         } as any,
       );
       console.log('[email] Booking patch result:', updateResult.matchedCount, 'matched,', updateResult.modifiedCount, 'modified');
-    } else {
+    } catch (err) {
+      console.error('[email] Failed to upload PDF / patch booking:', err);
+    }
+  } else if (status === 'sent') {
+    try {
+      const { ObjectId } = await import('mongodb');
+      const bookingsCollection = db.collection('bookings');
+      const bookingObjectId = new ObjectId(bookingId);
       console.log('[email] No PDF provided, skipping document save (pdfBase64:', !!pdfBase64, 'pdfFilename:', !!pdfFilename, ')');
       await bookingsCollection.updateOne(
         { _id: bookingObjectId },
-        { $set: { confirmationSent: true, confirmationSentAt: logEntry.sentAt } },
+        { $set: { confirmationSent: true, confirmationSentAt: sentAt } },
       );
+    } catch (err) {
+      console.error('[email] Failed to patch booking confirmationSentAt:', err);
     }
-  } catch (err) {
-    console.error('[email] Failed to patch booking confirmationSentAt:', err);
+  }
+
+  // Save log entry after upload so pdfUrl is populated
+  const logEntry = {
+    bookingId,
+    confirmationNo: confirmationNo ?? '',
+    to,
+    sentBy,
+    sentAt,
+    status,
+    html,
+    pdfFilename: pdfFilename ?? null,
+    pdfUrl: pdfUrl ?? null,
+    ...(errorMessage ? { errorMessage } : {}),
+    ...(resendId ? { resendId } : {}),
+  };
+
+  const insertResult = await emailLogsCollection.insertOne(logEntry);
+  const emailLogId = insertResult.insertedId.toString();
+
+  if (status === 'failed') {
+    res.status(500).json({ success: false, emailLogId, error: errorMessage });
+    return;
   }
 
   res.json({ success: true, emailLogId });
