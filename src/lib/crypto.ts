@@ -99,6 +99,8 @@ export function maskEncryptedFields<T extends Record<string, any>>(data: T): T {
     const value = result[key];
     if (value instanceof ObjectId) {
       result[key] = value.toHexString();
+    } else if (value instanceof Date) {
+      // leave Date instances as-is so JSON.stringify serialises them correctly
     } else if (isEncrypted(value)) {
       result[key] = '[encrypted]';
     } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
