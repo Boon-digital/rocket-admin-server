@@ -1,6 +1,6 @@
 {
   "name": "@boon-digital/rocket-admin-server",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "Backend API for admin template",
   "type": "module",
   "main": "dist/index.js",
