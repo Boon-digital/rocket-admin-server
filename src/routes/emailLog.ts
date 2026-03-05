@@ -12,12 +12,15 @@ emailLogRouter.get('/logs', async (req: Request, res: Response): Promise<void> =
   const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10));
   const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize ?? '50'), 10)));
 
-  const totalItems = await collection.countDocuments();
+  const bookingId = req.query.bookingId ? String(req.query.bookingId) : undefined;
+  const filter = bookingId ? { bookingId } : {};
+
+  const totalItems = await collection.countDocuments(filter);
   const totalPages = Math.ceil(totalItems / pageSize);
   const skip = (page - 1) * pageSize;
 
   const data = await collection
-    .find()
+    .find(filter)
     .sort({ sentAt: -1 })
     .skip(skip)
     .limit(pageSize)
