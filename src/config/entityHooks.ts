@@ -243,25 +243,65 @@ export function initEntityHooks(): void {
       body.status = computed.status
       body.subStatus = computed.subStatus
     }
+
+    // Copy costCentre/salesInvoice from parent booking onto the stay
+    const bookingId = body.bookingId ?? stayData.bookingId
+    if (bookingId) {
+      const booking = await bookingService.getById(bookingId)
+      if (booking) {
+        body.costCentre = (booking as any).costCentre ?? null
+        body.salesInvoice = (booking as any).salesInvoice ?? null
+      }
+    }
   })
 
-  // bookings: cascade-delete all stays when a booking is deleted
-  registerCrossEntitySync('bookings', async (op, _savedDoc, previousDoc) => {
-    if (op !== 'delete') return
-    try {
-      if (!previousDoc) return
-      const bookingId = typeof previousDoc._id === 'object'
-        ? (previousDoc._id.$oid ?? previousDoc._id.toString())
-        : String(previousDoc._id)
-      const stays = await stayService.findByField('bookingId', bookingId)
-      for (const stay of stays) {
-        const stayId = typeof (stay as any)._id === 'object'
-          ? ((stay as any)._id.$oid ?? (stay as any)._id.toString())
-          : String((stay as any)._id)
-        await stayService.delete(stayId)
+  // bookings: cascade-delete all stays when a booking is deleted; push costCentre/salesInvoice on upsert
+  registerCrossEntitySync('bookings', async (op, savedDoc, previousDoc) => {
+    if (op === 'delete') {
+      try {
+        if (!previousDoc) return
+        const bookingId = typeof previousDoc._id === 'object'
+          ? (previousDoc._id.$oid ?? previousDoc._id.toString())
+          : String(previousDoc._id)
+        const stays = await stayService.findByField('bookingId', bookingId)
+        for (const stay of stays) {
+          const stayId = typeof (stay as any)._id === 'object'
+            ? ((stay as any)._id.$oid ?? (stay as any)._id.toString())
+            : String((stay as any)._id)
+          await stayService.delete(stayId)
+        }
+      } catch (err) {
+        console.error('[crossEntitySync] bookings → stays cascade delete failed:', err)
       }
-    } catch (err) {
-      console.error('[crossEntitySync] bookings → stays cascade delete failed:', err)
+      return
+    }
+
+    // On upsert, push costCentre/salesInvoice onto all child stays
+    if (op === 'upsert' && savedDoc) {
+      try {
+        const bookingId = typeof savedDoc._id === 'object'
+          ? ((savedDoc._id as any).$oid ?? savedDoc._id.toString())
+          : String(savedDoc._id)
+        const costCentre = (savedDoc as any).costCentre ?? null
+        const salesInvoice = (savedDoc as any).salesInvoice ?? null
+
+        let stays = await stayService.findByField('bookingId', bookingId)
+        if (stays.length === 0) {
+          const summaryIds: string[] = ((savedDoc as any).staySummaries ?? [])
+            .map((s: any) => s.stayId).filter(Boolean)
+          if (summaryIds.length > 0) {
+            stays = await stayService.getByIds(summaryIds)
+          }
+        }
+        for (const stay of stays) {
+          const stayId = typeof (stay as any)._id === 'object'
+            ? ((stay as any)._id.$oid ?? (stay as any)._id.toString())
+            : String((stay as any)._id)
+          await stayService.update(stayId, { costCentre, salesInvoice } as any)
+        }
+      } catch (err) {
+        console.error('[crossEntitySync] bookings → stays costCentre/salesInvoice sync failed:', err)
+      }
     }
   })
 
