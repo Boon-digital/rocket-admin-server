@@ -133,13 +133,10 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
   const emailLogsCollection = db.collection('email_logs');
 
   // ─── TEST GUARD ────────────────────────────────────────────────────────────
-  // During testing, override the recipient so no real bookers receive emails.
-  // Remove this block (and the TEST_EMAIL_OVERRIDE env var) when going live.
-  const testOverride = process.env.TEST_EMAIL_OVERRIDE;
-  const effectiveTo = testOverride ?? to;
-  if (testOverride) {
-    console.log(`[email] TEST_EMAIL_OVERRIDE active — redirecting ${to} → ${testOverride}`);
-  }
+  // Hardcoded recipients during testing — real bookers do not receive emails.
+  // Replace with real recipient logic when going live.
+  const effectiveTo = ['erik@corporatemeetingpartner.com', 'daan@corporatemeetingpartner.com', 'ruben@boondigital.nl'];
+  console.log(`[email] TEST MODE — redirecting ${to} → ${effectiveTo.join(', ')}`);
   // ───────────────────────────────────────────────────────────────────────────
 
   const subject = `Your hotel confirmation: ${confirmationNo ?? ''}`;
@@ -161,9 +158,7 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
 
     const result = await resend.emails.send({
       from: 'Corporate Meeting Partner <donotreply@develop-digital.nl>',
-      to: [effectiveTo],
-      bcc: ['donotreply@develop-digital.nl'],
-      cc: ['erik@corporatemeetingpartner.com', 'daan@corporatemeetingpartner.com'],
+      to: effectiveTo,
       subject,
       html,
       attachments,
