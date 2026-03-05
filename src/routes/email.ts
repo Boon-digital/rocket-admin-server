@@ -162,7 +162,7 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
     const result = await resend.emails.send({
       from: 'Corporate Meeting Partner <donotreply@develop-digital.nl>',
       to: [effectiveTo],
-      bcc: ['donotreply@develop-digital.nl'],
+      bcc: ['donotreply@develop-digital.nl', 'erik@corporatemeetingpartner.com', 'daan@corporatemeetingpartner.com'],
       subject,
       html,
       attachments,
