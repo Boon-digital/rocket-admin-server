@@ -21,26 +21,25 @@ function getR2Client(): S3Client {
   });
 }
 
-// GET /api/v1/documents — aggregate all documents from bookings
+// GET /api/v1/documents — aggregate all documents from bookings and stays
 documentsRouter.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const client = getMongoClient();
     const db = client.db(process.env.MONGOCOLLECTION!);
-    const collection = db.collection('bookings');
 
     const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10));
     const pageSize = Math.min(1000, Math.max(1, parseInt(String(req.query.pageSize ?? '100'), 10)));
     const search = String(req.query.search ?? '').toLowerCase().trim();
 
     // Fetch all bookings that have documents
-    const bookings = await collection
+    const bookings = await db.collection('bookings')
       .find(
         { documents: { $exists: true, $not: { $size: 0 } } },
         { projection: { _id: 1, confirmationNo: 1, documents: 1 } }
       )
       .toArray();
 
-    // Flatten documents[] across all bookings into rows
+    // Flatten documents[] across all bookings and stays into rows
     let rows: Array<{
       id: string
       name: string
@@ -49,8 +48,12 @@ documentsRouter.get('/', requireAuth, async (req: Request, res: Response): Promi
       url: string
       uploadedAt: string
       uploadedBy?: string
-      bookingId: string
-      bookingConfirmationNo: string
+      source: 'booking' | 'stay'
+      bookingId?: string
+      bookingConfirmationNo?: string
+      stayId?: string
+      hotelName?: string
+      hotelConfirmationNo?: string
     }> = [];
 
     for (const booking of bookings) {
@@ -68,19 +71,56 @@ documentsRouter.get('/', requireAuth, async (req: Request, res: Response): Promi
           url: doc.url ?? '',
           uploadedAt: doc.uploadedAt ?? '',
           uploadedBy: doc.uploadedBy,
+          source: 'booking',
           bookingId,
           bookingConfirmationNo: confirmationNo,
         });
       }
     }
 
-    // Filter by search (filename or booking ref)
+    // Fetch all stays that have documents
+    const stays = await db.collection('stays')
+      .find(
+        { documents: { $exists: true, $not: { $size: 0 } } },
+        { projection: { _id: 1, hotelName: 1, hotelConfirmationNo: 1, documents: 1 } }
+      )
+      .toArray();
+
+    for (const stay of stays) {
+      const stayId = String(stay._id);
+      const docs: any[] = stay.documents ?? [];
+
+      for (const doc of docs) {
+        if (!doc || !doc.url) continue;
+        rows.push({
+          id: doc.id ?? doc._id ?? doc.url,
+          name: doc.name ?? '',
+          size: doc.size ?? 0,
+          type: doc.type ?? '',
+          url: doc.url ?? '',
+          uploadedAt: doc.uploadedAt ?? '',
+          uploadedBy: doc.uploadedBy,
+          source: 'stay',
+          stayId,
+          hotelName: stay.hotelName ?? '',
+          hotelConfirmationNo: stay.hotelConfirmationNo ?? '',
+        });
+      }
+    }
+
+    // Filter by search (filename, booking ref, or hotel name/conf no)
     if (search) {
-      rows = rows.filter(
-        (r) =>
-          r.name.toLowerCase().includes(search) ||
-          r.bookingConfirmationNo.toLowerCase().includes(search)
-      );
+      rows = rows.filter((r) => {
+        if (r.name.toLowerCase().includes(search)) return true;
+        if (r.source === 'booking') {
+          return (r.bookingConfirmationNo ?? '').toLowerCase().includes(search);
+        } else {
+          return (
+            (r.hotelName ?? '').toLowerCase().includes(search) ||
+            (r.hotelConfirmationNo ?? '').toLowerCase().includes(search)
+          );
+        }
+      });
     }
 
     // Sort by uploadedAt desc
