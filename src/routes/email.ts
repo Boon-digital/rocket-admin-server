@@ -165,14 +165,10 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
   const db = client.db(process.env.MONGOCOLLECTION!);
   const emailLogsCollection = db.collection('email_logs');
 
-  // ─── TEST GUARD ────────────────────────────────────────────────────────────
-  // Hardcoded recipients during testing — real bookers do not receive emails.
-  // Replace with real recipient logic when going live.
-  const effectiveTo = ['ruben@boondigital.nl'];
-  const effectiveCc: string[] = [];
-  const effectiveBcc: string[] = [];
-  console.log(`[email] TEST MODE — redirecting ${to} → ${effectiveTo.join(', ')}`);
-  // ───────────────────────────────────────────────────────────────────────────
+  const effectiveTo = Array.isArray(to) ? to : [to];
+  const effectiveCc: string[] = Array.isArray(ccBody) ? ccBody : (ccBody ? [ccBody] : []);
+  const effectiveBcc: string[] = Array.isArray(bccBody) ? bccBody : (bccBody ? [bccBody] : []);
+  console.log(`[email] Sending to: ${effectiveTo.join(', ')}${effectiveCc.length ? ` cc: ${effectiveCc.join(', ')}` : ''}`);
 
   const subject = subjectBody?.trim() || `Your hotel confirmation: ${confirmationNo ?? ''}`;
   const html = bodyText?.trim()
