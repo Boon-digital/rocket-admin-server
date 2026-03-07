@@ -1,8 +1,17 @@
 import { Router, type Request, type Response } from 'express';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { ObjectId } from 'mongodb';
 import { getMongoClient } from '../services/mongoService.js';
 import { requireAuth } from '../middleware/auth.js';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const LOCAL_UPLOADS_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../uploads'
+);
 
 export const documentsRouter = Router();
 
@@ -139,6 +148,70 @@ documentsRouter.get('/', requireAuth, async (req: Request, res: Response): Promi
   } catch (err) {
     console.error('[documents] GET error:', err);
     res.status(500).json({ error: 'Failed to fetch documents' });
+  }
+});
+
+// DELETE /api/v1/documents — atomically remove file from storage + $pull from MongoDB
+documentsRouter.delete('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { docId, docUrl, entityType, entityId } = req.body as {
+      docId?: string;
+      docUrl?: string;
+      entityType?: string;
+      entityId?: string;
+    };
+
+    if (!docId || !docUrl || !entityType || !entityId) {
+      res.status(400).json({ error: 'Missing required fields: docId, docUrl, entityType, entityId' });
+      return;
+    }
+    if (entityType !== 'booking' && entityType !== 'stay') {
+      res.status(400).json({ error: 'entityType must be "booking" or "stay"' });
+      return;
+    }
+
+    let objectId: ObjectId;
+    try {
+      objectId = new ObjectId(entityId);
+    } catch {
+      res.status(400).json({ error: 'Invalid entityId' });
+      return;
+    }
+
+    // Delete from storage (fire-and-forget errors — continue to MongoDB cleanup)
+    try {
+      if (isLocalMode()) {
+        const filename = path.basename(new URL(docUrl).pathname);
+        await fs.unlink(path.join(LOCAL_UPLOADS_DIR, filename)).catch(() => {/* already gone */});
+      } else {
+        const key = new URL(docUrl).pathname.replace(/^\//, '');
+        const client = getR2Client();
+        await client.send(new DeleteObjectCommand({
+          Bucket: process.env.R2_BUCKET!,
+          Key: key,
+        }));
+      }
+    } catch (err) {
+      console.error('[documents] DELETE storage error (continuing):', err);
+    }
+
+    // Atomically remove the document entry from MongoDB
+    const collectionName = entityType === 'stay' ? 'stays' : 'bookings';
+    const db = getMongoClient().db(process.env.MONGOCOLLECTION!);
+    const result = await db.collection(collectionName).updateOne(
+      { _id: objectId },
+      { $pull: { documents: { id: docId } } } as any
+    );
+
+    if (result.matchedCount === 0) {
+      res.status(404).json({ error: 'Entity not found' });
+      return;
+    }
+
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('[documents] DELETE error:', err);
+    res.status(500).json({ error: 'Delete failed' });
   }
 });
 
