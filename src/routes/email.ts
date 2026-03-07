@@ -50,7 +50,33 @@ function formatDate(dateString: string | undefined): string {
   }
 }
 
-function buildEmailHtml(bookerName: string, _confirmationNo: string, staySummaries: any[]): string {
+/**
+ * Wraps plain-text body in a minimal HTML email shell.
+ * Preserves line breaks as <br> tags.
+ */
+function wrapBodyTextAsHtml(bodyText: string): string {
+  const escaped = bodyText
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br />\n');
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+<body style="font-family: Arial, sans-serif; color: #000000; max-width: 600px; margin: 0 auto; padding: 24px;">
+  <p style="white-space: pre-wrap; line-height: 1.6;">${escaped}</p>
+</body>
+</html>`;
+}
+
+/**
+ * Legacy HTML builder — used as fallback when no bodyText is provided.
+ */
+function buildEmailHtml(bookerName: string, _confirmationNo: string, staySummaries: any[], senderName: string): string {
   const stayRows = staySummaries
     .map((s) => {
       const guestNames =
@@ -96,6 +122,7 @@ function buildEmailHtml(bookerName: string, _confirmationNo: string, staySummari
   <p>We hope you and/or your guest(s) have a pleasant stay.</p>
 
   <p style="margin-top: 24px; color: #6b7280; font-size: 14px;">
+    ${senderName || 'CMP Team'}<br />
     Corporate Meeting Partner<br />
     <a href="mailto:donotreply@corporatemeetingpartner.com" style="color: #6b7280;">donotreply@corporatemeetingpartner.com</a>
   </p>
@@ -107,13 +134,19 @@ function buildEmailHtml(bookerName: string, _confirmationNo: string, staySummari
 emailRouter.post('/send-confirmation', async (req: Request, res: Response): Promise<void> => {
   const {
     bookingId,
+    from: fromBody,
     to,
+    cc: ccBody,
+    bcc: bccBody,
+    subject: subjectBody,
+    bodyText,
     bookerName,
     confirmationNo,
     staySummaries,
     pdfBase64,
     pdfFilename,
     sentBy: sentByBody,
+    senderName,
   } = req.body;
 
   if (!to || !bookingId) {
@@ -135,12 +168,20 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
   // ─── TEST GUARD ────────────────────────────────────────────────────────────
   // Hardcoded recipients during testing — real bookers do not receive emails.
   // Replace with real recipient logic when going live.
-  const effectiveTo = ['erik@corporatemeetingpartner.com', 'daan@corporatemeetingpartner.com', 'ruben@boondigital.nl'];
+  const effectiveTo = ['ruben@boondigital.nl'];
+  const effectiveCc: string[] = [];
+  const effectiveBcc: string[] = [];
   console.log(`[email] TEST MODE — redirecting ${to} → ${effectiveTo.join(', ')}`);
   // ───────────────────────────────────────────────────────────────────────────
 
-  const subject = `Your hotel confirmation: ${confirmationNo ?? ''}`;
-  const html = buildEmailHtml(bookerName ?? 'Guest', confirmationNo ?? '', staySummaries ?? []);
+  const subject = subjectBody?.trim() || `Your hotel confirmation: ${confirmationNo ?? ''}`;
+  const html = bodyText?.trim()
+    ? wrapBodyTextAsHtml(bodyText.trim())
+    : buildEmailHtml(bookerName ?? 'Guest', confirmationNo ?? '', staySummaries ?? [], senderName ?? 'CMP Team');
+
+  // The from address shown on outgoing mail — use what the user selected, falling back to a safe default
+  const fromAddress = fromBody?.trim() || 'noreply@developdigital.nl';
+  const fromFormatted = `Corporate Meeting Partner <${fromAddress}>`;
 
   let status: 'sent' | 'failed' = 'sent';
   let errorMessage: string | undefined;
@@ -156,13 +197,18 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
       });
     }
 
-    const result = await resend.emails.send({
-      from: 'Corporate Meeting Partner <donotreply@develop-digital.nl>',
+    const sendParams: Parameters<typeof resend.emails.send>[0] = {
+      from: fromFormatted,
       to: effectiveTo,
       subject,
       html,
       attachments,
-    });
+    };
+
+    if (effectiveCc.length > 0) sendParams.cc = effectiveCc;
+    if (effectiveBcc.length > 0) sendParams.bcc = effectiveBcc;
+
+    const result = await resend.emails.send(sendParams);
 
     if (result.error) {
       throw new Error(result.error.message);
@@ -241,7 +287,6 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
       const { ObjectId } = await import('mongodb');
       const bookingsCollection = db.collection('bookings');
       const bookingObjectId = new ObjectId(bookingId);
-      console.log('[email] No PDF provided, skipping document save (pdfBase64:', !!pdfBase64, 'pdfFilename:', !!pdfFilename, ')');
       await bookingsCollection.updateOne(
         { _id: bookingObjectId },
         { $set: { confirmationSent: true, confirmationSentAt: sentAt } },
@@ -255,8 +300,13 @@ emailRouter.post('/send-confirmation', async (req: Request, res: Response): Prom
   const logEntry = {
     bookingId,
     confirmationNo: confirmationNo ?? '',
+    from: fromAddress,
     to,
+    cc: ccBody ?? [],
+    bcc: bccBody ?? [],
+    subject,
     sentBy,
+    senderName: senderName ?? null,
     sentAt,
     status,
     html,
