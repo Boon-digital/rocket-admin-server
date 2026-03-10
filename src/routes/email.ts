@@ -68,7 +68,7 @@ function wrapBodyTextAsHtml(bodyText: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 </head>
 <body style="font-family: Arial, sans-serif; color: #000000; max-width: 600px; margin: 0 auto; padding: 24px;">
-  <div style="line-height: 1.6; margin: 0;">${escaped}</div>
+  <div style="line-height: 1.6; margin: 0; white-space: pre-wrap;">${escaped}</div>
 </body>
 </html>`;
 }
