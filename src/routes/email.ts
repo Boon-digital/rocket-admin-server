@@ -55,11 +55,18 @@ function formatDate(dateString: string | undefined): string {
  * Preserves line breaks as <br> tags.
  */
 function wrapBodyTextAsHtml(bodyText: string): string {
-  const escaped = bodyText
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br>');
+  const paragraphs = bodyText
+    .split('\n')
+    .map((line) => {
+      const escaped = line
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return escaped
+        ? `<p style="margin: 0 0 8px 0;">${escaped}</p>`
+        : `<p style="margin: 0 0 8px 0;">&nbsp;</p>`;
+    })
+    .join('\n');
 
   return `<!DOCTYPE html>
 <html>
@@ -68,7 +75,7 @@ function wrapBodyTextAsHtml(bodyText: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 </head>
 <body style="font-family: Arial, sans-serif; color: #000000; max-width: 600px; margin: 0 auto; padding: 24px;">
-  <div style="line-height: 1.6; margin: 0; white-space: pre-wrap;">${escaped}</div>
+  ${paragraphs}
 </body>
 </html>`;
 }
