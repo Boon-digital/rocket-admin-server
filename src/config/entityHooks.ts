@@ -220,11 +220,14 @@ export function initEntityHooks(): void {
       } else {
         const contacts = await contactService.getByIds(ids)
         const contactMap = new Map(contacts.map((c: any) => {
-          const cid = typeof c._id === 'object' ? c._id.toString() : String(c._id)
+          // Normalise _id to its hex string regardless of whether it's an ObjectId instance or {$oid} wrapper
+          const cid = typeof c._id === 'object' && c._id !== null
+            ? (c._id.$oid ?? c._id.toString())
+            : String(c._id)
           const name = [c.general?.firstName, c.general?.lastName].filter(Boolean).join(' ')
           return [cid, name]
         }))
-        body.guestNames = ids.map((bodyId) => contactMap.get(bodyId) ?? bodyId)
+        body.guestNames = ids.map((bodyId) => contactMap.get(bodyId) ?? '')
       }
     }
 
@@ -244,13 +247,16 @@ export function initEntityHooks(): void {
       body.subStatus = computed.subStatus
     }
 
-    // Copy costCentre/salesInvoice from parent booking onto the stay
+    // Copy denormalized booking fields onto the stay
     const bookingId = body.bookingId ?? stayData.bookingId
     if (bookingId) {
       const booking = await bookingService.getById(bookingId)
       if (booking) {
         body.costCentre = (booking as any).costCentre ?? null
         body.salesInvoice = (booking as any).salesInvoice ?? null
+        body.bookerName = (booking as any).bookerName ?? null
+        body.companyName = (booking as any).companyName ?? null
+        body.confirmationNo = (booking as any).confirmationNo ?? null
       }
     }
   })
@@ -276,7 +282,7 @@ export function initEntityHooks(): void {
       return
     }
 
-    // On upsert, push costCentre/salesInvoice onto all child stays
+    // On upsert, push denormalized booking fields onto all child stays
     if (op === 'upsert' && savedDoc) {
       try {
         const bookingId = typeof savedDoc._id === 'object'
@@ -284,6 +290,9 @@ export function initEntityHooks(): void {
           : String(savedDoc._id)
         const costCentre = (savedDoc as any).costCentre ?? null
         const salesInvoice = (savedDoc as any).salesInvoice ?? null
+        const bookerName = (savedDoc as any).bookerName ?? null
+        const companyName = (savedDoc as any).companyName ?? null
+        const confirmationNo = (savedDoc as any).confirmationNo ?? null
 
         let stays = await stayService.findByField('bookingId', bookingId)
         if (stays.length === 0) {
@@ -297,10 +306,10 @@ export function initEntityHooks(): void {
           const stayId = typeof (stay as any)._id === 'object'
             ? ((stay as any)._id.$oid ?? (stay as any)._id.toString())
             : String((stay as any)._id)
-          await stayService.update(stayId, { costCentre, salesInvoice } as any)
+          await stayService.update(stayId, { costCentre, salesInvoice, bookerName, companyName, confirmationNo } as any)
         }
       } catch (err) {
-        console.error('[crossEntitySync] bookings → stays costCentre/salesInvoice sync failed:', err)
+        console.error('[crossEntitySync] bookings → stays sync failed:', err)
       }
     }
   })

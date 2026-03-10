@@ -137,7 +137,10 @@ export class MongoService<T extends { _id?: any }> {
 
   async getByIds(ids: string[]): Promise<T[]> {
     try {
-      const objectIds = ids.map((id) => new ObjectId(id));
+      const objectIds = ids
+        .map((id) => { try { return new ObjectId(id) } catch { return null } })
+        .filter((oid): oid is ObjectId => oid !== null);
+      if (objectIds.length === 0) return [];
       const results = await this.collection
         .find({ _id: { $in: objectIds } } as Filter<T>)
         .toArray();

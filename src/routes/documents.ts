@@ -57,12 +57,15 @@ documentsRouter.get('/', requireAuth, async (req: Request, res: Response): Promi
       url: string
       uploadedAt: string
       uploadedBy?: string
-      source: 'booking' | 'stay'
+      source: 'booking' | 'stay' | 'hotel' | 'company'
       bookingId?: string
       bookingConfirmationNo?: string
       stayId?: string
       hotelName?: string
       hotelConfirmationNo?: string
+      hotelId?: string
+      companyId?: string
+      companyName?: string
     }> = [];
 
     for (const booking of bookings) {
@@ -117,18 +120,75 @@ documentsRouter.get('/', requireAuth, async (req: Request, res: Response): Promi
       }
     }
 
+    // Fetch all hotels that have documents
+    const hotels = await db.collection('hotels')
+      .find(
+        { documents: { $exists: true, $not: { $size: 0 } } },
+        { projection: { _id: 1, name: 1, documents: 1 } }
+      ).toArray();
+
+    for (const hotel of hotels) {
+      const hotelId = String(hotel._id);
+      for (const doc of (hotel.documents ?? []) as any[]) {
+        if (!doc?.url) continue;
+        rows.push({
+          id: doc.id ?? doc._id ?? doc.url,
+          name: doc.name ?? '',
+          size: doc.size ?? 0,
+          type: doc.type ?? '',
+          url: doc.url,
+          uploadedAt: doc.uploadedAt ?? '',
+          uploadedBy: doc.uploadedBy,
+          source: 'hotel',
+          hotelId,
+          hotelName: hotel.name ?? '',
+        });
+      }
+    }
+
+    // Fetch all companies that have documents
+    const companies = await db.collection('companies')
+      .find(
+        { documents: { $exists: true, $not: { $size: 0 } } },
+        { projection: { _id: 1, name: 1, documents: 1 } }
+      ).toArray();
+
+    for (const company of companies) {
+      const companyId = String(company._id);
+      for (const doc of (company.documents ?? []) as any[]) {
+        if (!doc?.url) continue;
+        rows.push({
+          id: doc.id ?? doc._id ?? doc.url,
+          name: doc.name ?? '',
+          size: doc.size ?? 0,
+          type: doc.type ?? '',
+          url: doc.url,
+          uploadedAt: doc.uploadedAt ?? '',
+          uploadedBy: doc.uploadedBy,
+          source: 'company',
+          companyId,
+          companyName: company.name ?? '',
+        });
+      }
+    }
+
     // Filter by search (filename, booking ref, or hotel name/conf no)
     if (search) {
       rows = rows.filter((r) => {
         if (r.name.toLowerCase().includes(search)) return true;
         if (r.source === 'booking') {
           return (r.bookingConfirmationNo ?? '').toLowerCase().includes(search);
-        } else {
+        } else if (r.source === 'stay') {
           return (
             (r.hotelName ?? '').toLowerCase().includes(search) ||
             (r.hotelConfirmationNo ?? '').toLowerCase().includes(search)
           );
+        } else if (r.source === 'hotel') {
+          return (r.hotelName ?? '').toLowerCase().includes(search);
+        } else if (r.source === 'company') {
+          return (r.companyName ?? '').toLowerCase().includes(search);
         }
+        return false;
       });
     }
 
@@ -165,8 +225,8 @@ documentsRouter.delete('/', requireAuth, async (req: Request, res: Response): Pr
       res.status(400).json({ error: 'Missing required fields: docId, docUrl, entityType, entityId' });
       return;
     }
-    if (entityType !== 'booking' && entityType !== 'stay') {
-      res.status(400).json({ error: 'entityType must be "booking" or "stay"' });
+    if (entityType !== 'booking' && entityType !== 'stay' && entityType !== 'hotel' && entityType !== 'company') {
+      res.status(400).json({ error: 'entityType must be "booking", "stay", "hotel", or "company"' });
       return;
     }
 
@@ -196,7 +256,11 @@ documentsRouter.delete('/', requireAuth, async (req: Request, res: Response): Pr
     }
 
     // Atomically remove the document entry from MongoDB
-    const collectionName = entityType === 'stay' ? 'stays' : 'bookings';
+    const collectionName =
+      entityType === 'stay' ? 'stays' :
+      entityType === 'hotel' ? 'hotels' :
+      entityType === 'company' ? 'companies' :
+      'bookings';
     const db = getMongoClient().db(process.env.MONGOCOLLECTION!);
     const result = await db.collection(collectionName).updateOne(
       { _id: objectId },
