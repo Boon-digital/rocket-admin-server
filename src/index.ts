@@ -9,6 +9,7 @@ import ConnectMongoDBSession from 'connect-mongodb-session';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { authRouter, configurePassport } from './routes/auth.js';
+import { b2brouterWebhookRouter } from './routes/b2brouter.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requireAuth } from './middleware/auth.js';
 import { connectMongo, getMongoClient } from './services/mongoService.js';
@@ -117,6 +118,9 @@ export async function start(registry: Record<string, EntityRegistryEntry>): Prom
   await setupAuth();
   initEntityHooks();
   initStayStatusCron();
+
+  // Webhook routes (public — B2B Router must be able to POST without auth)
+  app.use('/webhooks', b2brouterWebhookRouter);
 
   // API routes (protected when AUTH_ENABLED)
   app.use(API_PREFIX, requireAuth, router);

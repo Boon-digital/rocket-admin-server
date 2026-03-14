@@ -6,6 +6,7 @@ import { uploadRouter } from './upload.js';
 import { emailRouter } from './email.js';
 import { emailLogRouter } from './emailLog.js';
 import { documentsRouter } from './documents.js';
+import { b2brouterRouter } from './b2brouter.js';
 
 export const router = Router();
 
@@ -40,6 +41,9 @@ router.use('/email', emailLogRouter);
 
 // Documents (aggregated across bookings)
 router.use('/documents', documentsRouter);
+
+// B2B Router (invoice sending)
+router.use('/b2brouter', b2brouterRouter);
 
 // API info endpoint
 router.get('/', (_req, res) => {
